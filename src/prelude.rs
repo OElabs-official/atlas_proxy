@@ -147,7 +147,7 @@ pub struct ConfigV1 {
     /// 注册相关配置
     ///
     /// 为 Some 时自动注册到 VPS，为 None 时忽略
-    pub registration: Option<Ip>,
+    pub registration: Option<std::net::IpAddr>,
 }
 
 
@@ -155,9 +155,11 @@ pub struct ConfigV1 {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PortForward {
     // [Stable] 输入为被转发的ip地址和端口，输出为本机的端口（ip 为0.0.0.0）
-    pub input: (Ip, u16),
+    pub input: (std::net::IpAddr, u16),
     pub output: u16,
 }
+
+/*
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Ip {
     V4([u8; 4]),
@@ -284,6 +286,7 @@ impl FromStr for Ip {
         Ip::from_str(ip)
     }
 }
+*/
 
 impl ConfigV1 {
     pub fn get() -> &'static Self {
