@@ -1,48 +1,65 @@
-use std::net::{IpAddr as StdIpAddr, Ipv4Addr, Ipv6Addr};
+use std::net::{IpAddr , Ipv4Addr, Ipv6Addr};
+use ntex::web;
 use serde::{Serialize, Deserialize};
+use tokio::sync::RwLock;
 
-/// IP 地址枚举（用于 TOML 配置文件序列化）
-/// 
-/// 与 `std::net::IpAddr` 兼容。
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum Ip {
-    V4([u8; 4]),
-    V6([u16; 8]),
+mod api;
+
+
+#[ntex::main]
+async fn ntex_server
+(
+
+) -> std::io::Result<()> 
+{
+    web::HttpServer::new
+    (async || 
+    {
+        web::App::new()
+            .state(RwLock::new(0)) // task i0  > struct default = 0; use inner rwlock
+            /*
+                .middleware
+                (
+                    Cors::new()
+                    // .allowed_origin("*") 
+                    .allowed_methods(vec!["GET", "POST","OPTIONS"])
+                    .allowed_headers(vec!
+                        [
+                            http::header::AUTHORIZATION, 
+                            http::header::ACCEPT,
+                            http::header::CONTENT_TYPE,
+                            http::header::AUTHORIZATION,
+                            
+                        ])
+                    // .allowed_header(http::header::CONTENT_TYPE)
+                    .max_age(3600)
+                    .send_wildcard()
+                    .finish()
+                )  
+                .service
+                (
+                    web::resource("/proxy")
+                    .route(web::route().to(hello))
+                )
+
+             */
+
+
+            .service(hello)            
+            // .default_service(web::route().to(testinglibs::flutter_web::dyn_service))
+
+
+    })
+    .bind(("0.0.0.0", 13600))?
+    .run()
+    .await
 }
 
-impl Ip {
-    /// 从 std::net::IpAddr 创建
-    pub fn from_std(ip: StdIpAddr) -> Self {
-        match ip {
-            StdIpAddr::V4(v4) => {
-                let bytes = v4.octets();
-                Ip::V4([bytes[0], bytes[1], bytes[2], bytes[3]])
-            }
-            StdIpAddr::V6(v6) => {
-                let segments = v6.segments();
-                Ip::V6([segments[0], segments[1], segments[2], segments[3], segments[4], segments[5], segments[6], segments[7]])
-            }
-        }
-    }
-
-    /// 转换为 std::net::IpAddr
-    pub fn to_std(&self) -> StdIpAddr {
-        match self {
-            Ip::V4(bytes) => StdIpAddr::V4(Ipv4Addr::new(bytes[0], bytes[1], bytes[2], bytes[3])),
-            Ip::V6(segments) => StdIpAddr::V6(Ipv6Addr::new(segments[0], segments[1], segments[2], segments[3], segments[4], segments[5], segments[6], segments[7])),
-        }
-    }
+#[web::get("/")]
+async fn hello() -> impl web::Responder {
+    web::HttpResponse::Ok().body("Hello world!")
 }
 
-/// IP 地址类型别名（直接使用 std::net::IpAddr）
-pub type IpAddr = StdIpAddr;
-
-/// 端口转发规则
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PortForward {
-    pub input: (IpAddr, u16),
-    pub output: u16,
-}
 
 /// 获取本地 IP 地址
 pub fn get_local_ip() -> Vec<IpAddr> {

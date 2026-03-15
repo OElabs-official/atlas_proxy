@@ -19,7 +19,8 @@ thiserror = "2"
 uuid = { version = "1", features = ["v4"] }
 log = "0.4"
 anyhow = "1"
-ntex = "3"
+ntex = {version = "3.6.1", features = ["tokio"]}
 serde_json = "1"
 local-ip-address = "0.6.9"
 
+ 

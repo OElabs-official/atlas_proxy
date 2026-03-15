@@ -130,27 +130,51 @@ fn get_config_path() -> PathBuf {
 
 // ==================== ConfigV1 ====================
 
-#[derive(Debug, Clone, Serialize, Deserialize, SmartDefault)]
+#[derive(Debug, Clone, Serialize, Deserialize, )]
 pub struct ConfigV1 {
-    #[default(CARGO_PKG_NAME.to_string())]
+
     pub app_name: String,
-    #[default(CARGO_PKG_VERSION.to_string())]
+
     pub version: String,
     pub port_forwards: Vec<PortForward>,
     
     /// 本机主机名（仅 host 模式使用）
-    /// 
     /// 在首次启动且配置文件不存在时，会通过键盘输入设置。
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
 
     /// 注册相关配置
-    ///
     /// 为 Some 时自动注册到 VPS，为 None 时忽略
     pub registration: Option<std::net::IpAddr>,
 }
 
+impl Default for ConfigV1 {
+    fn default() -> Self {
+        // 询问用户输入主机名
+        print!("请输入本机名称 (host 模式): ");
+        std::io::Write::flush(&mut std::io::stdout()).expect("Failed to flush stdout");
+        
+        let mut input = String::new();
+        std::io::stdin().read_line(&mut input).expect("Failed to read line");
+        let name = input.trim().to_string();
+        
+        let name = if name.is_empty() {
+            None
+        } else {
+            Some(name)
+        };
 
+        Self { 
+            app_name: CARGO_PKG_NAME.to_string(), 
+            version: CARGO_PKG_VERSION.to_string(), 
+            port_forwards: vec![PortForward {
+                input: (std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)), 8080),
+                output: 18080,
+            }],
+            name,
+            registration: None
+        }
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PortForward {
@@ -314,47 +338,47 @@ impl ConfigV1 {
         })
     }
 
-    /// 初始化配置（带主机名输入）
-    /// 
-    /// 与 get() 相同，但在配置文件不存在时会通过键盘输入主机名。
+    // 初始化配置（带主机名输入）
+    // 
+    // 与 get() 相同，但在配置文件不存在时会通过键盘输入主机名。
     /// 仅在 host 模式首次启动时调用。
-    pub fn init_with_name_input() -> &'static Self {
-        CONFIG.get_or_init(|| {
-            let config_path = get_config_path();
+    // pub fn init_with_name_input() -> &'static Self {
+    //     CONFIG.get_or_init(|| {
+    //         let config_path = get_config_path();
 
-            if config_path.exists() {
-                if let Ok(config_str) = fs::read_to_string(&config_path) {
-                    if let Ok(config) = toml::from_str::<Self>(&config_str) {
-                        return config;
-                    }
-                }
-            }
+    //         if config_path.exists() {
+    //             if let Ok(config_str) = fs::read_to_string(&config_path) {
+    //                 if let Ok(config) = toml::from_str::<Self>(&config_str) {
+    //                     return config;
+    //                 }
+    //             }
+    //         }
 
-            let mut default_config = Self::default();
+    //         let mut default_config = Self::default();
             
-            // 首次启动，通过键盘输入主机名
-            print!("请输入本机名称（host 模式）: ");
-            std::io::Write::flush(&mut std::io::stdout()).ok();
+    //         // 首次启动，通过键盘输入主机名
+    //         print!("请输入本机名称（host 模式）: ");
+    //         std::io::Write::flush(&mut std::io::stdout()).ok();
             
-            let mut input = String::new();
-            std::io::stdin().read_line(&mut input).ok();
-            let name = input.trim().to_string();
+    //         let mut input = String::new();
+    //         std::io::stdin().read_line(&mut input).ok();
+    //         let name = input.trim().to_string();
             
-            if !name.is_empty() {
-                default_config.name = Some(name);
-            }
+    //         if !name.is_empty() {
+    //             default_config.name = Some(name);
+    //         }
             
-            let _ = fs::create_dir_all(ProjectPath::get().proj_dir.clone());
-            let _ = fs::create_dir_all(ProjectPath::get().exe_dir.clone());
+    //         let _ = fs::create_dir_all(ProjectPath::get().proj_dir.clone());
+    //         let _ = fs::create_dir_all(ProjectPath::get().exe_dir.clone());
 
-            let save_path = ProjectPath::get().proj_dir.join(CONFIG_FILENAME);
-            if let Ok(toml_str) = toml::to_string_pretty(&default_config) {
-                let _ = fs::write(&save_path, toml_str);
-            }
+    //         let save_path = ProjectPath::get().proj_dir.join(CONFIG_FILENAME);
+    //         if let Ok(toml_str) = toml::to_string_pretty(&default_config) {
+    //             let _ = fs::write(&save_path, toml_str);
+    //         }
 
-            default_config
-        })
-    }
+    //         default_config
+    //     })
+    // }
 
     pub fn update(&self) -> Result<(), Box<dyn std::error::Error>> {
         let config_path = ProjectPath::get().proj_dir.join(CONFIG_FILENAME);
