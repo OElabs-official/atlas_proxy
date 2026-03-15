@@ -24,10 +24,11 @@ use directories::{BaseDirs, ProjectDirs, UserDirs};
 use serde::{Deserialize, Serialize};
 use sqlx::{SqlitePool, sqlite::SqliteConnectOptions};
 use smart_default::SmartDefault;
+use tokio::sync::RwLock;
 use std::{env, fs};
 use std::str::FromStr;
 use std::path::PathBuf;
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 use tracing::Level;
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, Layer, Registry};
@@ -107,7 +108,8 @@ impl ProjectPathV1 {
 }
 
 // ==================== ConfigManager ====================
-static CONFIG: OnceLock<Config> = OnceLock::new();
+// 新一代标准的全局变量读写锁控制方案参考 
+static CONFIG: OnceLock<RwLock<Config>> = OnceLock::new();
 pub type Config = ConfigV1;
 
 const CONFIG_FILENAME: &str = "config.toml";
@@ -130,7 +132,7 @@ fn get_config_path() -> PathBuf {
 
 // ==================== ConfigV1 ====================
 
-#[derive(Debug, Clone, Serialize, Deserialize, )]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConfigV1 {
 
     pub app_name: String,
@@ -138,31 +140,35 @@ pub struct ConfigV1 {
     pub version: String,
     pub port_forwards: Vec<PortForward>,
     
-    /// 本机主机名（仅 host 模式使用）
+    /// 本机主机名（仅 host 模式使用） , Vps 模式可以写入VPS
     /// 在首次启动且配置文件不存在时，会通过键盘输入设置。
-    pub name: Option<String>,
+    pub name:String,
 
     /// 注册相关配置
     /// 为 Some 时自动注册到 VPS，为 None 时忽略
     pub registration: Option<std::net::IpAddr>,
 }
 
+
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PortForward {
+    // [Stable] 输入为被转发的ip地址和端口，输出为本机的端口（ip 为0.0.0.0）
+    pub input: (std::net::IpAddr, u16),
+    pub output: u16,
+}
+
+
 impl Default for ConfigV1 {
     fn default() -> Self {
         // 询问用户输入主机名
-        print!("请输入本机名称 (host 模式): ");
+        print!("请输入本机名称 : ");
         std::io::Write::flush(&mut std::io::stdout()).expect("Failed to flush stdout");
         
         let mut input = String::new();
         std::io::stdin().read_line(&mut input).expect("Failed to read line");
         let name = input.trim().to_string();
         
-        let name = if name.is_empty() {
-            None
-        } else {
-            Some(name)
-        };
-
         Self { 
             app_name: CARGO_PKG_NAME.to_string(), 
             version: CARGO_PKG_VERSION.to_string(), 
@@ -176,151 +182,15 @@ impl Default for ConfigV1 {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PortForward {
-    // [Stable] 输入为被转发的ip地址和端口，输出为本机的端口（ip 为0.0.0.0）
-    pub input: (std::net::IpAddr, u16),
-    pub output: u16,
-}
-
-/*
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum Ip {
-    V4([u8; 4]),
-    V6([u16; 8]),
-}
-
-impl Ip {
-    pub fn from_str(ip: &str) -> Result<Self, String> {
-        if ip.contains(':') {
-            Self::parse_ipv6(ip)
-        } else {
-            Self::parse_ipv4(ip)
-        }
-    }
-
-    fn parse_ipv4(ip: &str) -> Result<Self, String> {
-        let parts: Vec<&str> = ip.split('.').collect();
-        if parts.len() != 4 {
-            return Err(format!("Invalid IPv4 address: {}", ip));
-        }
-
-        let bytes = [
-            parts[0].parse::<u8>().map_err(|_| "Invalid IPv4 part")?,
-            parts[1].parse::<u8>().map_err(|_| "Invalid IPv4 part")?,
-            parts[2].parse::<u8>().map_err(|_| "Invalid IPv4 part")?,
-            parts[3].parse::<u8>().map_err(|_| "Invalid IPv4 part")?,
-        ];
-
-        Ok(Ip::V4(bytes))
-    }
-
-    fn parse_ipv6(ip: &str) -> Result<Self, String> {
-        // Handle IPv4-mapped IPv6 addresses like ::ffff:192.168.1.1
-        if let Some(pos) = ip.rfind(':') {
-            let possible_ipv4 = &ip[pos + 1..];
-            if possible_ipv4.parse::<Ip>().is_ok() {
-                // Convert IPv4 to last 2 segments of IPv6
-                let ipv4 = possible_ipv4.parse::<Ip>().unwrap();
-                if let Ip::V4(bytes) = ipv4 {
-                    let mut segments = [0u16; 8];
-                    segments[6] = ((bytes[0] as u16) << 8) | (bytes[1] as u16);
-                    segments[7] = ((bytes[2] as u16) << 8) | (bytes[3] as u16);
-                    
-                    // prefix is before the last colon
-                    let prefix = &ip[..pos];
-                    if !prefix.is_empty() && prefix != "::" {
-                        let prefix_parts: Vec<&str> = prefix.split(':').filter(|s| !s.is_empty()).collect();
-                        if prefix_parts.len() > 6 {
-                            return Err(format!("IPv6 with IPv4 suffix has too many segments: {}", ip));
-                        }
-                        for (i, part) in prefix_parts.iter().enumerate() {
-                            segments[i] = u16::from_str_radix(part, 16)
-                                .map_err(|_| format!("Invalid IPv6 segment: {}", part))?;
-                        }
-                    }
-                    return Ok(Ip::V6(segments));
-                }
-            }
-        }
-
-        let mut segments = [0u16; 8];
-        let mut seg_idx = 0;
-
-        let mut parts: Vec<&str> = ip.split("::").collect();
-        let (prefix, suffix) = if parts.len() == 2 {
-            (parts[0], parts[1])
-        } else if parts[0].is_empty() && parts[1].is_empty() {
-            ("", "")
-        } else if parts[0].is_empty() {
-            ("", parts[1])
-        } else if parts[1].is_empty() {
-            (parts[0], "")
-        } else {
-            return Err(format!("Invalid IPv6 format: {}", ip));
-        };
-
-        if !prefix.is_empty() {
-            let prefix_parts: Vec<&str> = prefix.split(':').filter(|s| !s.is_empty()).collect();
-            for part in prefix_parts {
-                if seg_idx >= 8 {
-                    return Err(format!("IPv6 has too many segments: {}", ip));
-                }
-                segments[seg_idx] = u16::from_str_radix(part, 16)
-                    .map_err(|_| format!("Invalid IPv6 segment: {}", part))?;
-                seg_idx += 1;
-            }
-        }
-
-        if !suffix.is_empty() {
-            let suffix_parts: Vec<&str> = suffix.split(':').filter(|s| !s.is_empty()).collect();
-            if seg_idx + suffix_parts.len() > 8 {
-                return Err(format!("IPv6 has too many segments: {}", ip));
-            }
-            for part in suffix_parts {
-                segments[seg_idx] = u16::from_str_radix(part, 16)
-                    .map_err(|_| format!("Invalid IPv6 segment: {}", part))?;
-                seg_idx += 1;
-            }
-        }
-
-        // Fill remaining with zeros
-        while seg_idx < 8 {
-            seg_idx += 1;
-        }
-
-        Ok(Ip::V6(segments))
-    }
-
-    pub fn to_string(&self) -> String {
-        match self {
-            Ip::V4(bytes) => format!("{}.{}.{}.{}", bytes[0], bytes[1], bytes[2], bytes[3]),
-            Ip::V6(segments) => {
-                let hex: Vec<String> = segments.iter().map(|s| format!("{:x}", s)).collect();
-                hex.join(":")
-            }
-        }
-    }
-}
-
-impl FromStr for Ip {
-    type Err = String;
-
-    fn from_str(ip: &str) -> Result<Self, Self::Err> {
-        Ip::from_str(ip)
-    }
-}
-*/
-
 impl ConfigV1 {
-    pub fn get() -> &'static Self {
+    pub fn get() -> &'static RwLock<Self> {
         CONFIG.get_or_init(|| {
             let config_path = get_config_path();
 
             if config_path.exists() {
                 if let Ok(config_str) = fs::read_to_string(&config_path) {
                     if let Ok(config) = toml::from_str::<Self>(&config_str) {
-                        return config;
+                        return RwLock::new(config);
                     }
                 }
             }
@@ -334,51 +204,9 @@ impl ConfigV1 {
                 let _ = fs::write(&save_path, toml_str);
             }
 
-            default_config
+            RwLock::new(default_config)
         })
     }
-
-    // 初始化配置（带主机名输入）
-    // 
-    // 与 get() 相同，但在配置文件不存在时会通过键盘输入主机名。
-    /// 仅在 host 模式首次启动时调用。
-    // pub fn init_with_name_input() -> &'static Self {
-    //     CONFIG.get_or_init(|| {
-    //         let config_path = get_config_path();
-
-    //         if config_path.exists() {
-    //             if let Ok(config_str) = fs::read_to_string(&config_path) {
-    //                 if let Ok(config) = toml::from_str::<Self>(&config_str) {
-    //                     return config;
-    //                 }
-    //             }
-    //         }
-
-    //         let mut default_config = Self::default();
-            
-    //         // 首次启动，通过键盘输入主机名
-    //         print!("请输入本机名称（host 模式）: ");
-    //         std::io::Write::flush(&mut std::io::stdout()).ok();
-            
-    //         let mut input = String::new();
-    //         std::io::stdin().read_line(&mut input).ok();
-    //         let name = input.trim().to_string();
-            
-    //         if !name.is_empty() {
-    //             default_config.name = Some(name);
-    //         }
-            
-    //         let _ = fs::create_dir_all(ProjectPath::get().proj_dir.clone());
-    //         let _ = fs::create_dir_all(ProjectPath::get().exe_dir.clone());
-
-    //         let save_path = ProjectPath::get().proj_dir.join(CONFIG_FILENAME);
-    //         if let Ok(toml_str) = toml::to_string_pretty(&default_config) {
-    //             let _ = fs::write(&save_path, toml_str);
-    //         }
-
-    //         default_config
-    //     })
-    // }
 
     pub fn update(&self) -> Result<(), Box<dyn std::error::Error>> {
         let config_path = ProjectPath::get().proj_dir.join(CONFIG_FILENAME);

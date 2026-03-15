@@ -1,13 +1,15 @@
-use std::net::{IpAddr , Ipv4Addr, Ipv6Addr};
+use std::{collections::HashMap, net::{IpAddr , Ipv4Addr, Ipv6Addr}, sync::OnceLock};
 use ntex::web;
+use ntex::server::Server;
 use serde::{Serialize, Deserialize};
 use tokio::sync::RwLock;
 
 mod api;
 
 
+
 #[ntex::main]
-async fn ntex_server
+pub async fn ntex_server
 (
 
 ) -> std::io::Result<()> 
@@ -45,12 +47,13 @@ async fn ntex_server
              */
 
 
-            .service(hello)            
+            .service(hello)    
+            .service(api::scope_api("api"))        
             // .default_service(web::route().to(testinglibs::flutter_web::dyn_service))
 
 
     })
-    .bind(("0.0.0.0", 13600))?
+    .bind(("0.0.0.0", 1025))?
     .run()
     .await
 }
