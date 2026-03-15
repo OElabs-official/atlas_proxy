@@ -1,0 +1,16 @@
+[package]
+name = "rustls-example"
+version = "3.0.0"
+authors = ["Nikolay Kim <fafhrd91@gmail.com>"]
+edition = "2018"
+
+[[bin]]
+name = "rustls-server"
+path = "src/main.rs"
+
+[dependencies]
+env_logger = "0.11"
+rustls = "0.23"
+rustls-pemfile = "2"
+ntex = { version = "3.0", features = ["rustls", "tokio"] }
+ntex-files = "3.1.0"

@@ -1,0 +1,52 @@
+[workspace]
+resolver = "3"
+members = [
+   "async_db",
+   "async_ex1",
+   "async_ex2",
+   "async_pg",
+   "awc_https",
+   "basics",
+   "cookie-auth",
+   "cookie-session",
+#   "diesel",
+   "docker_sample",
+   "error_handling",
+   "form",
+   "graphql-demo",
+   "hello-world",
+   "http-proxy",
+   "json",
+   "json_error",
+   "jsonrpc",
+   "juniper",
+   "middleware",
+   "multipart",
+   "openssl",
+   "r2d2",
+   "run-in-thread",
+   "rustls",
+   "server-sent-events",
+   "shutdown-server",
+#   "simple-auth-server",
+   "state",
+   "static_index",
+   "template_askama",
+   "template_handlebars",
+   "template_tera",
+   "template_yarte",
+   "todo",
+   "tokio",
+   "unix-socket",
+   "websocket",
+   "websocket-lowlevel",
+   "websocket-chat",
+   "websocket-tcp-chat",
+]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.85"
+
+[profile.release]
+panic = 'abort'
