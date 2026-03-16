@@ -1,7 +1,7 @@
 mod prelude;
 mod net;
 
-use crate::{net::{get_local_ip, print_ips}, prelude::{Config, DatabaseManager, ProjectPath, TracingManager}};
+use crate::{net::{get_local_ip, print_ips}, prelude::{CliArgs, Config, DatabaseManager, ProjectPath, TracingManager}};
 use anyhow::Result;
 
 // #[tokio::main]
@@ -9,7 +9,7 @@ use anyhow::Result;
 fn main() {
     ProjectPath::get();
     TracingManager::init();
-    let args = prelude::get_cli_args();
+    let args = CliArgs::get();
 
     let x = get_local_ip();
     print_ips(&x);
@@ -25,8 +25,7 @@ fn main() {
 }
 
 fn start_vps_mode() -> Result<()> {
-    let _database = DatabaseManager::init();
-    println!("VPS mode with simplified types not fully implemented yet");
+    let _ = net::ntex_server_vps();
     Ok(())
 }
 

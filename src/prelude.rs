@@ -136,10 +136,9 @@ fn get_config_path() -> PathBuf {
 pub struct ConfigV1 {
 
     pub app_name: String,
-
     pub version: String,
-    pub port_forwards: Vec<PortForward>,
-    
+    pub static_port_forwards: Vec<StaticPortForward>,
+    pub dyn_port_forwards: Vec<DynPortForward>,
     /// 本机主机名（仅 host 模式使用） , Vps 模式可以写入VPS
     /// 在首次启动且配置文件不存在时，会通过键盘输入设置。
     pub name:String,
@@ -152,9 +151,17 @@ pub struct ConfigV1 {
 
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PortForward {
+pub struct StaticPortForward {
     // [Stable] 输入为被转发的ip地址和端口，输出为本机的端口（ip 为0.0.0.0）
     pub input: (std::net::IpAddr, u16),
+    pub output: u16,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DynPortForward {
+    // 动态转发端口，根据vps数据转换ip地址再进行转发，input.1 为其他Host主机名
+    pub input: (String, u16),
+    pub inf : String,
     pub output: u16,
 }
 
@@ -172,10 +179,11 @@ impl Default for ConfigV1 {
         Self { 
             app_name: CARGO_PKG_NAME.to_string(), 
             version: CARGO_PKG_VERSION.to_string(), 
-            port_forwards: vec![PortForward {
+            static_port_forwards: vec![StaticPortForward {
                 input: (std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)), 8080),
                 output: 18080,
             }],
+            dyn_port_forwards:vec![],
             name,
             registration: None
         }
@@ -362,6 +370,9 @@ pub struct CliArgs {
     pub vps_port: Option<u16>,
 }
 
-pub fn get_cli_args() -> &'static CliArgs {
-    ARGS.get_or_init(CliArgs::parse)
+impl CliArgs
+{
+    pub fn get()-> &'static Self {
+        ARGS.get_or_init(Self::parse)
+    }
 }

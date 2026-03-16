@@ -4,7 +4,7 @@ use crate::prelude::Config;
 use serde::Serialize;
 
 
-pub fn scope_api(path:&str) -> web::Scope<web::DefaultError> 
+pub fn scope_hostapi(path:&str) -> web::Scope<web::DefaultError> 
 {
     let x: web::Scope<web::DefaultError> = web::scope(path)
         .service(hello)
@@ -22,7 +22,7 @@ async fn hello() -> impl web::Responder {
 #[web::get("/port")]
 async fn port_forwards() -> impl web::Responder {
     let config = Config::get().read().await;
-    Json(config.port_forwards.clone())
+    Json(config.static_port_forwards.clone())
 }
 
 #[web::get("/localip")]
