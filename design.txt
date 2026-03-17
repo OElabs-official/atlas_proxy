@@ -1,0 +1,10 @@
+静态转发✅
+
+动态转发：
+    VPS端✅
+    Host端（Target）
+        定时发送IP到VPS✅
+    Host端（Client）
+        根据动态IP写入HashMap查询转发❓
+    Host 前端：
+        

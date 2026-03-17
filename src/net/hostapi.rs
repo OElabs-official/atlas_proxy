@@ -3,7 +3,7 @@ use ntex::web::types::Json;
 use tokio::sync::RwLock;
 use crate::prelude::Config;
 use crate::prelude::ProjectPath;
-use super::{RecordRequest, dynapi};
+use super::{RecordRequest};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -11,9 +11,9 @@ use std::net::IpAddr;
 use std::sync::OnceLock;
 use toml;
 
-static DYN_RECORD: OnceLock<RwLock<HashMap<String, IpAddr>>> = OnceLock::new();
+pub static DYN_RECORD: OnceLock<RwLock<HashMap<String, IpAddr>>> = OnceLock::new();
 
-fn get_dyn_record() -> &'static RwLock<HashMap<String, IpAddr>> {
+pub fn get_dyn_record() -> &'static RwLock<HashMap<String, IpAddr>> {
     DYN_RECORD.get_or_init(|| RwLock::new(HashMap::new()))
 }
 
@@ -144,3 +144,17 @@ async fn list_dynip() -> impl web::Responder {
     let record = get_dyn_record().read().await;
     Json(record.clone())
 }
+
+
+/*
+# Set a device's IP address
+curl -X POST http://localhost:1025/api/set_dynip \
+  -H "Content-Type: application/json" \
+  -d '{"name": "device1", "ip": "192.168.1.100"}'
+
+# Get a device's IP address
+curl http://localhost:1025/api/get_dynip/device1
+
+# List all stored mappings
+curl http://localhost:1025/api/list_dynip
+ */

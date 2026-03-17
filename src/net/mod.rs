@@ -3,6 +3,7 @@ use ntex::web;
 use tokio::sync::RwLock;
 use futures::future::try_join_all;
 use crate::prelude::{CliArgs, Config};
+use crate::net::hostapi::get_dyn_record;
 use serde::{Deserialize, Serialize};
 use tokio::time::{interval, Duration};
 use reqwest::Client;
@@ -119,11 +120,56 @@ pub async fn ntex_server
                             if let Ok(mut remote) = tokio::net::TcpStream::connect(target).await {
                                 let (mut ri, mut wi) = client.split();
                                 let (mut rr, mut wr) = remote.split();
-                                
+          
+            
                                 let _ = tokio::try_join!(
                                     tokio::io::copy(&mut ri, &mut wr),
                                     tokio::io::copy(&mut rr, &mut wi)
                                 );
+                            }
+                        });
+                    }
+                }
+            }
+        });
+    }
+    
+    for forward in config.dyn_port_forwards.iter() {
+        let dyn_record = get_dyn_record();
+        let target_name = forward.input.0.clone();
+        let remote_port = forward.input.1;
+        let listen_addr = format!("0.0.0.0:{}", forward.output)
+            .parse::<std::net::SocketAddr>()
+            .unwrap();
+        
+        tokio::spawn(async move {
+            if let Ok(listener) = tokio::net::TcpListener::bind(listen_addr).await {
+                loop {
+                    if let Ok((mut client, _)) = listener.accept().await {
+                        let dyn_record = dyn_record.clone();
+                        let target_name = target_name.clone();
+                        
+                        tokio::spawn(async move {
+                            let record = dyn_record.read().await;
+                            let target_ip = record.get(&target_name).cloned();
+                            drop(record);
+                            
+                            if let Some(ip) = target_ip {
+                                let target_addr = format!("{}:{}", ip, remote_port)
+                                    .parse::<std::net::SocketAddr>()
+                                    .unwrap();
+                                
+                                if let Ok(mut remote) = tokio::net::TcpStream::connect(target_addr).await {
+                                    let (mut ri, mut wi) = client.split();
+                                    let (mut rr, mut wr) = remote.split();
+                
+                                    let _ = tokio::try_join!(
+                                        tokio::io::copy(&mut ri, &mut wr),
+                                        tokio::io::copy(&mut rr, &mut wi)
+                                    );
+                                }
+                            } else {
+                                tracing::error!("Device '{}' not found in DYN_RECORD", target_name);
                             }
                         });
                     }
