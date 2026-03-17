@@ -145,9 +145,8 @@ pub struct ConfigV1 {
 
     /// 注册相关配置
     /// 为 Some 时自动注册到 VPS，为 None 时忽略
-    pub registration: Option<std::net::IpAddr>,
+    pub registration: Option<(std::net::IpAddr,u16)>,
 }
-
 
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -159,7 +158,7 @@ pub struct StaticPortForward {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DynPortForward {
-    // 动态转发端口，根据vps数据转换ip地址再进行转发，input.1 为其他Host主机名
+    // 动态转发端口，根据vps数据转换ip地址再进行转发，input.1 为其他Host主机名, inf 为描述
     pub input: (String, u16),
     pub inf : String,
     pub output: u16,
@@ -216,9 +215,15 @@ impl ConfigV1 {
         })
     }
 
-    pub fn update(&self) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn update() -> Result<(), Box<dyn std::error::Error>> {
+        let cfg;
+        {
+            let ptr = Self::get().read().await;
+            cfg = (*ptr).clone();            
+        }
+
         let config_path = ProjectPath::get().proj_dir.join(CONFIG_FILENAME);
-        let toml_str = toml::to_string_pretty(self)?;
+        let toml_str = toml::to_string_pretty(&cfg)?;
         fs::write(&config_path, toml_str)?;
         Ok(())
     }

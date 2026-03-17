@@ -23,5 +23,6 @@ ntex = {version = "3.6.1", features = ["tokio"]}
 serde_json = "1"
 local-ip-address = "0.6.9"
 futures = "0.3.32"
+reqwest = { version = "0.12", features = ["json"] }
 
  

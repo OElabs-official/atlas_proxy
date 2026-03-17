@@ -4,12 +4,14 @@ use tokio::sync::RwLock;
 use futures::future::try_join_all;
 use crate::prelude::{CliArgs, Config};
 use serde::{Deserialize, Serialize};
+use tokio::time::{interval, Duration};
+use reqwest::Client;
 
-mod hostapi;
-mod serverapi;
+pub mod hostapi;
+pub mod serverapi;
 
 #[derive(Deserialize,Serialize)]
-struct RecordRequest {
+pub struct RecordRequest {
     name: String,
     ips: Vec<IpAddr>,
 }
@@ -63,6 +65,42 @@ pub async fn ntex_server
     let mut tasks = vec![atlas_proxy_server];
 
     let config = Config::get().read().await;
+    let registration_config = config.registration.clone();
+    drop(config);
+    
+    if let Some((vps_addr, vps_port)) = registration_config {
+        tokio::spawn(async move {
+            let config = Config::get();
+            let client = Client::new();
+            let mut interval = interval(Duration::from_secs(600));
+            loop {
+                let cfg = config.read().await;
+                let name = cfg.name.clone();
+                let ips = get_local_ip();
+                drop(cfg);
+                
+                let record = RecordRequest {
+                    name,
+                    ips,
+                };
+                
+                let vps_url = format!("http://{}:{}/api/record", vps_addr, vps_port);
+                
+                if let Err(e) = client
+                    .post(&vps_url)
+                    .json(&record)
+                    .send()
+                    .await
+                {
+                    tracing::error!("Error registering to VPS: {}", e);
+                }
+                
+                interval.tick().await;
+            }
+        });
+    }
+    
+    let config = Config::get().read().await;
     for forward in config.static_port_forwards.iter() {
         let target_addr = format!("{}:{}", forward.input.0, forward.input.1)
             .parse::<std::net::SocketAddr>()
@@ -114,7 +152,7 @@ pub async fn ntex_server_vps
             .service(serverapi::scope_serverapi("api"))      
     })
     .bind(("0.0.0.0", port))?
-    .run().await;
+    .run().await?;
     Ok(())
     // 
 }
